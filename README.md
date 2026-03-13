@@ -1,5 +1,5 @@
 [![Continuous Self-Actualization](https://github.com/authwait/perfect/actions/workflows/pipeline.yml/badge.svg)](https://github.com/authwait/perfect/actions/workflows/pipeline.yml)
-[![Version](https://img.shields.io/badge/version-1.0.2-blue)](https://github.com/authwait/perfect/releases)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue)](https://github.com/authwait/perfect/releases)
 [![Proofs](https://img.shields.io/badge/proofs-10%2F10%20verified-brightgreen)](proofs/)
 
 # Perfect Software Factory
@@ -155,3 +155,6 @@ The developer never creates release commits, bumps version numbers, or publishes
 ---
 *You're still reading? This repository was made with love and satire by [authwait](https://github.com/authwait).* 
 
+
+---
+*Perfect v1.0.0 was actualized and verified with Perfect.*
