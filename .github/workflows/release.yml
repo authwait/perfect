@@ -1,0 +1,145 @@
+name: Actualize Release
+
+on:
+  workflow_run:
+    workflows: ["Continuous Self-Actualization"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  actualize-release:
+    name: Actualize Release
+    # The factory does not re-actualize its own output (Theorem 5: Idempotence)
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.actor.login != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Retrieve specification
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          CURRENT="$(cat VERSION)"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+
+          # Find the last release tag
+          LAST_TAG="$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || echo "")"
+
+          if [ -z "$LAST_TAG" ]; then
+            # First release — actualize at the current specification version
+            NEW_VERSION="$CURRENT"
+          else
+            # Determine what changed since the last release
+            DIFF_FILES="$(git diff --name-only "$LAST_TAG" HEAD)"
+
+            if echo "$DIFF_FILES" | grep -qE '^(src/|proofs/|Makefile)'; then
+              # Core specification change — minor version bump
+              NEW_VERSION="$MAJOR.$((MINOR + 1)).0"
+            else
+              # Documentation or metadata change — patch version bump
+              NEW_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
+            fi
+          fi
+
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "new=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Specification version: $CURRENT -> $NEW_VERSION"
+
+      - name: Update VERSION
+        run: echo "${{ steps.version.outputs.new }}" > VERSION
+
+      - name: Update README version badge
+        run: |
+          VERSION="${{ steps.version.outputs.new }}"
+          sed -i "s|version-[0-9]*\.[0-9]*\.[0-9]*-blue|version-${VERSION}-blue|" README.md
+
+      - name: Actualize build artifact
+        run: make build
+
+      - name: Verify version embedding
+        run: |
+          EXPECTED="perfect ${{ steps.version.outputs.new }}"
+          ACTUAL="$(./build/perfect version)"
+          echo "Expected: $EXPECTED"
+          echo "Actual:   $ACTUAL"
+          [ "$ACTUAL" = "$EXPECTED" ]
+
+      - name: Self-actualize
+        run: build/perfect e2e .
+
+      - name: Self-actualize (idempotence)
+        run: |
+          rm -rf .perfect
+          build/perfect e2e .
+
+      - name: Install elan
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Verify all proofs
+        run: cd proofs && lake build
+
+      - name: Stamp actualization
+        run: |
+          VERSION="${{ steps.version.outputs.new }}"
+          STAMP="*Perfect v${VERSION} was actualized and verified with Perfect.*"
+          if grep -q "^\*Perfect v.* was actualized and verified with Perfect\.\*$" README.md; then
+            sed -i "s/^\*Perfect v.* was actualized and verified with Perfect\.\*$/${STAMP}/" README.md
+          else
+            printf '\n---\n%s\n' "$STAMP" >> README.md
+          fi
+
+      - name: Clean actualization artifacts
+        run: rm -rf .perfect
+
+      - name: Commit and tag
+        run: |
+          VERSION="${{ steps.version.outputs.new }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add VERSION README.md
+          git commit -m "Actualize v${VERSION}
+
+          Perfect v${VERSION} was actualized from specification, self-hosted,
+          and formally verified by the Continuous Self-Actualization pipeline."
+          git tag "v${VERSION}"
+          git push origin HEAD:main --tags
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.new }}
+          files: build/perfect
+          generate_release_notes: false
+          body: |
+            ## Perfect Software Factory v${{ steps.version.outputs.new }}
+
+            This release was actualized from specification, self-hosted, and formally verified by the Continuous Self-Actualization pipeline.
+
+            ### Verified Properties
+
+            All 7 theorems and 3 corollaries have been machine-checked by the Lean 4 type checker:
+
+            1. **Correctness** — actualize(spec) = spec
+            2. **Completeness** — Every valid specification is accepted
+            3. **Soundness** — Only valid specifications are accepted
+            4. **Determinism** — Identical inputs produce identical outputs
+            5. **Idempotence** — actualize(actualize(spec)) = actualize(spec)
+            6. **Bounded Termination** — The pipeline always terminates
+            7. **Language Universality** — All specification formats are supported
+
+            ### Installation
+
+            ```bash
+            chmod +x perfect
+            mv perfect ~/.local/bin/
+            ```

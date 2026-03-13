@@ -1,0 +1,14 @@
+# Perfect Software Factory artifacts
+.perfect/
+build/
+
+# Lean 4 / Lake
+proofs/.lake/
+proofs/lake-manifest.json
+
+# Build artifacts
+*.o
+*.so
+*.dylib
+*.a
+*.out

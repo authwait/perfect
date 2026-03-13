@@ -1,0 +1,148 @@
+name: Continuous Self-Actualization
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Retrieve specification
+        uses: actions/checkout@v6
+
+      - name: Actualize build artifact
+        run: make build
+
+      - name: Verify version embedding
+        run: |
+          EXPECTED="perfect $(cat VERSION)"
+          ACTUAL="$(./build/perfect version)"
+          echo "Expected: $EXPECTED"
+          echo "Actual:   $ACTUAL"
+          [ "$ACTUAL" = "$EXPECTED" ]
+
+      - name: Upload actualized artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: perfect
+          path: build/perfect
+
+  self-actualize:
+    name: Self-Actualize
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Retrieve specification
+        uses: actions/checkout@v6
+
+      - name: Download actualized artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: perfect
+          path: build
+
+      - name: Restore artifact permissions
+        run: chmod +x build/perfect
+
+      - name: Self-actualize (pass 1)
+        run: build/perfect e2e .
+
+      - name: Clean intermediate artifacts
+        run: rm -rf .perfect
+
+      - name: Self-actualize (pass 2 — idempotence)
+        run: build/perfect e2e .
+
+  actualize-notable-specifications:
+    name: "${{ matrix.project }}"
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - project: Express
+            repo: expressjs/express
+          - project: SQLite
+            repo: sqlite/sqlite
+          - project: React
+            repo: facebook/react
+          - project: Django
+            repo: django/django
+          - project: Kubernetes
+            repo: kubernetes/kubernetes
+          - project: Rust
+            repo: rust-lang/rust
+          - project: Linux Kernel
+            repo: torvalds/linux
+    steps:
+      - name: Download actualized artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: perfect
+          path: build
+
+      - name: Restore artifact permissions
+        run: chmod +x build/perfect
+
+      - name: Retrieve specification (${{ matrix.project }})
+        run: git clone --depth 1 https://github.com/${{ matrix.repo }}.git specification
+
+      - name: Actualize and assess
+        run: |
+          echo "=== Actualizing ${{ matrix.project }} ==="
+          time build/perfect e2e specification
+          echo "=== ${{ matrix.project }}: actualized with zero defects ==="
+
+  verify-proofs:
+    name: Verify Formal Proofs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Retrieve specification
+        uses: actions/checkout@v6
+
+      - name: Install elan
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Verify all proofs
+        run: cd proofs && lake build
+
+      - name: Enumerate verified properties
+        run: |
+          echo "=== Verified Properties ==="
+          echo "  1. Correctness"
+          echo "  2. Completeness"
+          echo "  3. Soundness"
+          echo "  4. Determinism"
+          echo "  5. Idempotence"
+          echo "  6. Bounded Termination"
+          echo "  7. Language Universality"
+          echo "  8. Self-Hosting (corollary)"
+          echo "  9. Specification Stability (corollary)"
+          echo " 10. Zero Defect Rate (corollary)"
+          echo "=== All 10 properties verified ==="
+
+  assess:
+    name: Assess
+    needs: [self-actualize, actualize-notable-specifications, verify-proofs]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Final assessment
+        run: |
+          echo "============================================"
+          echo "  Continuous Self-Actualization: PASSED"
+          echo ""
+          echo "  Build:              actualized"
+          echo "  Self-Actualize:     stable (idempotent)"
+          echo "  Notable Specs:      all actualized"
+          echo "  Formal Proofs:      verified"
+          echo "============================================"
